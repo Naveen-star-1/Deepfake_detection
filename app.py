@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 import joblib
 import os
+import requests
 
 from model import TransformerEncoder
 
@@ -25,8 +26,22 @@ SCALER_PATH = "processed_data/scaler.pkl"
 # --- MODEL LOADING (CACHED) ---
 @st.cache_resource
 def load_assets():
-    if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
-        raise FileNotFoundError(f"Model or Scaler not found. Please ensure '{MODEL_PATH}' and '{SCALER_PATH}' exist. You may need to train the model first.")
+    # Bypass Streamlit Git LFS Pointer Bug
+    if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 1000:
+        st.info("Downloading massive 95MB deepfake model from GitHub LFS bypassing cloud limits... please wait a minute!")
+        url = "https://media.githubusercontent.com/media/Naveen-star-1/Deepfake_detection/main/results/best_transformer_model.keras"
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+            with open(MODEL_PATH, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            st.success("Download complete!")
+        except Exception as e:
+            raise FileNotFoundError(f"Failed to fetch model from Github: {e}")
+            
+    if not os.path.exists(SCALER_PATH):
+        raise FileNotFoundError(f"Scaler not found at {SCALER_PATH}.")
         
     model = tf.keras.models.load_model(MODEL_PATH, custom_objects={"TransformerEncoder": TransformerEncoder})
     scaler = joblib.load(SCALER_PATH)
