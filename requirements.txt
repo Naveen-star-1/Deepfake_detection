@@ -1,5 +1,5 @@
 streamlit
 librosa
 numpy
-tensorflow
+tensorflow-cpu
 joblib
