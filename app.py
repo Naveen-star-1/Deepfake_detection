@@ -5,6 +5,7 @@ import tensorflow as tf
 import joblib
 import os
 import requests
+import tempfile
 
 from model import TransformerEncoder
 
@@ -26,13 +27,16 @@ SCALER_PATH = "processed_data/scaler.pkl"
 # --- MODEL LOADING (CACHED) ---
 @st.cache_resource
 def load_assets():
-    # Bypass Streamlit Git LFS Pointer Bug
-    if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 1000:
+    # Bypass Streamlit Git LFS Pointer Bug and corrupted downloads
+    if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 50_000_000:
+        if os.path.exists(MODEL_PATH):
+            os.remove(MODEL_PATH)  # Clean up partial or corrupt file
         st.info("Downloading massive 95MB deepfake model from GitHub LFS bypassing cloud limits... please wait a minute!")
         url = "https://media.githubusercontent.com/media/Naveen-star-1/Deepfake_detection/main/results/best_transformer_model.keras"
         try:
             response = requests.get(url, stream=True)
             response.raise_for_status()
+            os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
             with open(MODEL_PATH, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
@@ -96,8 +100,17 @@ def main():
         if st.button("Predict Audio Authenticity", type="primary", use_container_width=True):
             with st.spinner("Analyzing audio..."):
                 try:
-                    # Preprocess and Predict
-                    X_input = preprocess_audio(uploaded_file, scaler)
+                    # Preprocess and Predict: Save to temporary file to avoid librosa OS errors with Streamlit UploadedFile
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+                        
+                    try:
+                        X_input = preprocess_audio(tmp_path, scaler)
+                    finally:
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+                            
                     prediction = model.predict(X_input, verbose=0)
                     score = float(prediction[0][0])
                     
