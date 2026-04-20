@@ -27,22 +27,35 @@ SCALER_PATH = "processed_data/scaler.pkl"
 # --- MODEL LOADING (CACHED) ---
 @st.cache_resource
 def load_assets():
+    import urllib.request
     # Bypass Streamlit Git LFS Pointer Bug and corrupted downloads
+    url = "https://github.com/Naveen-star-1/Deepfake_detection/raw/main/results/best_transformer_model.keras"
+    
     if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 50_000_000:
+        print("Model missing or corrupted. Starting safe download...", flush=True)
+        st.warning("Downloading massive 95MB deepfake model... This will take ~30 seconds.")
+        
         if os.path.exists(MODEL_PATH):
-            os.remove(MODEL_PATH)  # Clean up partial or corrupt file
-        st.info("Downloading massive 95MB deepfake model from GitHub LFS bypassing cloud limits... please wait a minute!")
-        url = "https://media.githubusercontent.com/media/Naveen-star-1/Deepfake_detection/main/results/best_transformer_model.keras"
+            try:
+                os.remove(MODEL_PATH)
+            except Exception as e:
+                print(f"Warning: Could not delete old file: {e}", flush=True)
+                
+        os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+        
         try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-            os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-            with open(MODEL_PATH, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            st.success("Download complete!")
+            urllib.request.urlretrieve(url, MODEL_PATH)
         except Exception as e:
-            raise FileNotFoundError(f"Failed to fetch model from Github: {e}")
+            raise FileNotFoundError(f"Safe download failed: {e}")
+            
+        final_size = os.path.getsize(MODEL_PATH)
+        print(f"Download finished. File size: {final_size} bytes", flush=True)
+        
+        if final_size < 50_000_000:
+            os.remove(MODEL_PATH)
+            raise ValueError(f"Download integrity verification failed. Expected >50MB, got {final_size} bytes. GitHub might be blocking the download. Please reboot the app from Streamlit settings.")
+            
+        st.success("Download completed & verified!")
             
     if not os.path.exists(SCALER_PATH):
         raise FileNotFoundError(f"Scaler not found at {SCALER_PATH}.")
